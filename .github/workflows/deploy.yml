@@ -33,7 +33,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm run build --base /kaigionrails-rails-executor
+        run: pnpm run build --base /izumorb-kujira-ni-notta-ruby
 
       - uses: actions/configure-pages@v3
 

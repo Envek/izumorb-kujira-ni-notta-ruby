@@ -105,6 +105,12 @@ I'm Andrey, back-end engineer at Evil Martians. I and my family are living in Ja
 -->
 
 ---
+layout: image
+image: ./images/photo_2023-11-11_10-22-42.jpg
+---
+
+
+---
 
 <a href="https://evilmartians.com/?utm_source=izumorb&utm_medium=slides&utm_campaign=kujira-ni-notta-ruby">
 <img alt="Evil Martians" src="/images/01_Evil-Martians_Logo_v2.1_RGB.svg" class="block dark:hidden object-contain text-center m-auto max-h-100" />
@@ -126,6 +132,11 @@ I'm Andrey, back-end engineer at Evil Martians. I and my family are living in Ja
 
 イービル・マーシャンズは元々からRuby on Railsに集中する開発ショップとして知られてきましたが、今はそれをはるかに超えています。
 -->
+
+---
+layout: image
+image: ./images/osaka-izumo-distance-map.png
+---
 
 ---
 
@@ -219,8 +230,8 @@ One of our pillars is open source. We use open source products, and we create ou
 
  1. オペレーティングシステム
  2. 依存関係ライブラリー (OpenSSLなど)
- 3. ルービー
- 4. ルービージェム
+ 3. ルビー
+ 4. ルビージェム
  5. データベース (PostgreSQL/MySQL, Redis)
  6. ソースコードエディタ/IDE
  7. git
@@ -232,8 +243,8 @@ One of our pillars is open source. We use open source products, and we create ou
 
  1. オペレーティングシステム
  2. <mark>依存関係ライブラリー (OpenSSLなど)</mark>
- 3. <mark>ルービー</mark>
- 4. <mark>ルービージェム</mark>
+ 3. <mark>ルビー</mark>
+ 4. <mark>ルビージェム</mark>
  5. <mark>データベース (PostgreSQL/MySQL, Redis)</mark>
  6. ソースコードエディタ/IDE
  7. git
@@ -273,6 +284,8 @@ layout: statement
 普段、みんなはローカルで環境を設定して開発しています。
 
 ---
+class: text-xl
+---
 
 ## ローカルの設定の問題
 
@@ -289,25 +302,28 @@ asdfはすごいですが
 -->
 
 ---
+class: text-xl
+---
 
 ## ローカルの設定の問題
 
  2. ジェムのインストール
 
     悪名高い「Nokogiriのネイティブ拡張機能をコンパイルできない問題」 (現在はなくなっているはずですが)
-    Infamous “Can't compile Nokogiri native extensions problem” (nowadays should be gone but)
 
     PostgreSQL/MySQLの正しいバージョンのクライアントライブラリをローカルにインストールする必要があります。
 
+---
+class: text-xl
 ---
 
 ## ローカルの設定の問題
 
  3. データベース
 
-    Need to install right version of PostgreSQL (matching production)
+    適切なPostgreSQLのバージョンをインストールする必要がある（productionと同じ）
 
-    What if it is too old or too new? Or if there are some non-standard extensions need to be installed?
+    古すぎたり、新しすぎたりしたらどうなるでしょうか？ それとも、標準以外の拡張機能をインストールする必要がある場合は?
 
 ---
 
@@ -405,7 +421,7 @@ class: annotated-list
 layout: section
 ---
 
-# 解決方法：火星流のDockerの設定
+## 解決方法：火星流のDockerの設定
 
 ---
 
@@ -459,10 +475,115 @@ layout: section
 
 
 ---
+class: text-xs
+---
 
 ## Dockerの環境の問題解決: `Dockerfile`
 
-非常に薄くて、シンプルです。再ビルド必要はありません。
+<Transform scale="0.3">
+
+```dockerfile
+# syntax=docker/dockerfile:1
+
+ARG RUBY_VERSION
+ARG DISTRO_NAME=bullseye
+
+FROM ruby:$RUBY_VERSION-slim-$DISTRO_NAME
+
+ARG DISTRO_NAME
+
+# Common dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  --mount=type=tmpfs,target=/var/log \
+  rm -f /etc/apt/apt.conf.d/docker-clean; \
+  echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache; \
+  apt-get update -qq \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+    build-essential \
+    gnupg2 \
+    curl \
+    less \
+    git
+
+# Install PostgreSQL dependencies
+ARG PG_MAJOR
+RUN curl -sSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+    gpg --dearmor -o /usr/share/keyrings/postgres-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/postgres-archive-keyring.gpg] https://apt.postgresql.org/pub/repos/apt/" \
+    $DISTRO_NAME-pgdg main $PG_MAJOR | tee /etc/apt/sources.list.d/postgres.list > /dev/null
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  --mount=type=tmpfs,target=/var/log \
+  apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get -yq dist-upgrade && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+    libpq-dev \
+    postgresql-client-$PG_MAJOR
+
+# Install NodeJS and Yarn
+ARG NODE_MAJOR
+ARG YARN_VERSION=latest
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    --mount=type=tmpfs,target=/var/log \
+    apt-get update && \
+    apt-get install -y curl software-properties-common && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
+    echo "deb https://deb.nodesource.com/node_${NODE_MAJOR}.x $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends nodejs
+RUN npm install -g yarn@$YARN_VERSION
+
+# Application dependencies
+# We use an external Aptfile for this, stay tuned
+COPY Aptfile /tmp/Aptfile
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  --mount=type=tmpfs,target=/var/log \
+  apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get -yq dist-upgrade && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+    $(grep -Ev '^\s*#' /tmp/Aptfile | xargs)
+
+# Configure bundler
+ENV LANG=C.UTF-8 \
+  BUNDLE_JOBS=4 \
+  BUNDLE_RETRY=3
+
+# Store Bundler settings in the project's root
+ENV BUNDLE_APP_CONFIG=.bundle
+
+# Uncomment this line if you want to run binstubs without prefixing with `bin/` or `bundle exec`
+# ENV PATH /app/bin:$PATH
+
+# Upgrade RubyGems and install the latest Bundler version
+RUN gem update --system && \
+    gem install bundler
+
+# Create a directory for the app code
+RUN mkdir -p /app
+WORKDIR /app
+
+# Document that we're going to expose port 3000
+EXPOSE 3000
+# Use Bash as the default command
+CMD ["/bin/bash"]
+```
+
+</Transform>
+
+<qr-code url="https://github.com/evilmartians/ruby-on-whales/blob/b3edbc5663b460eadfd76d1b91a5e358b0f66884/example/.dockerdev/Dockerfile" caption="Ruby on Whales: Dockerfile" class="absolute bottom-4 right-4 w-48" />
+
+<!--
+Dockerfileの中身は長くて、恐ろしいですが、ビルドされたイメージは非常に薄くて、シンプルです。再ビルド必要はほとんどありません。
+-->
+
+---
+class: annotated-list
+---
+
+## Dockerの環境の問題解決: `Dockerfile`
+
+中身は長いですが、イメージは非常に薄くて、シンプルです。再ビルド必要はほとんどありません。
 
 <div class="grid grid-cols-2 text-xl">
 <div>
@@ -489,6 +610,171 @@ layout: section
 </div>
 </div>
 
+<!--
+Dockerfileは、Rubyアプリケーションの環境を定義します。この環境でサーバーを実行したり、rails cでコンソールを実行したり、テストやrakeタスクを走らせたり、その他にも開発者としてあらゆる形でのコードとのやりとりを行います。
+性能を高めるため、そしてビルドの時間を減らすために、Ruby自体以外はほとんど何も含めていません。コードを実行する為の環境だけを含めています。それに空いているcontextのディレクトリが使用されたり、RUNコマンドのキャッシュ機能も使われています。
+-->
+
+---
+
+# Dockerのビルド高速化
+
+Dockerのレイヤーキャッシュをよく効くために、`RUN --mount`を使っています。
+
+```dockerfile
+# Application dependencies
+# We use an external Aptfile for this, stay tuned
+COPY Aptfile /tmp/Aptfile
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  --mount=type=tmpfs,target=/var/log \
+  apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get -yq dist-upgrade && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+    $(grep -Ev '^\s*#' /tmp/Aptfile | xargs)
+```
+
+TODO: Add link to docs
+
+---
+class: text-sm
+---
+
+## `docker-compose.yml`
+
+<Transform scale="0.175">
+
+```yaml
+x-app: &app
+  build:
+    context: .
+    args:
+      RUBY_VERSION: '3.2.2'
+      PG_MAJOR: '15'
+      NODE_MAJOR: '18'
+  image: example-dev:1.0.0
+  environment: &env
+    NODE_ENV: ${NODE_ENV:-development}
+    RAILS_ENV: ${RAILS_ENV:-development}
+  tmpfs:
+    - /tmp
+    - /app/tmp/pids
+
+x-backend: &backend
+  <<: *app
+  stdin_open: true
+  tty: true
+  volumes:
+    - ..:/app:cached
+    - bundle:/usr/local/bundle
+    - rails_cache:/app/tmp/cache
+    - node_modules:/app/node_modules
+    - packs:/app/public/packs
+    - packs-test:/app/public/packs-test
+    - history:/usr/local/hist
+    - ./.psqlrc:/root/.psqlrc:ro
+    - ./.bashrc:/root/.bashrc:ro
+  environment: &backend_environment
+    <<: *env
+    REDIS_URL: redis://redis:6379/
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432
+    WEBPACKER_DEV_SERVER_HOST: webpacker
+    MALLOC_ARENA_MAX: 2
+    WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+    BOOTSNAP_CACHE_DIR: /usr/local/bundle/_bootsnap
+    XDG_DATA_HOME: /app/tmp/cache
+    YARN_CACHE_FOLDER: /app/node_modules/.yarn-cache
+    HISTFILE: /usr/local/hist/.bash_history
+    PSQL_HISTFILE: /usr/local/hist/.psql_history
+    IRB_HISTFILE: /usr/local/hist/.irb_history
+    EDITOR: vi
+  depends_on: &backend_depends_on
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  rails:
+    <<: *backend
+    command: bundle exec rails
+
+  web:
+    <<: *backend
+    command: bundle exec rails server -b 0.0.0.0
+    ports:
+      - '3000:3000'
+    depends_on:
+      webpacker:
+        condition: service_started
+      sidekiq:
+        condition: service_started
+
+  sidekiq:
+    <<: *backend
+    command: bundle exec sidekiq
+
+  postgres:
+    image: postgres:14
+    volumes:
+      - .psqlrc:/root/.psqlrc:ro
+      - postgres:/var/lib/postgresql/data
+      - history:/usr/local/hist
+    environment:
+      PSQL_HISTFILE: /usr/local/hist/.psql_history
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - 5432
+    healthcheck:
+      test: pg_isready -U postgres -h 127.0.0.1
+      interval: 5s
+
+  redis:
+    image: redis:6.2-alpine
+    volumes:
+      - redis:/data
+    ports:
+      - 6379
+    healthcheck:
+      test: redis-cli ping
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  webpacker:
+    <<: *app
+    command: bundle exec ./bin/webpack-dev-server
+    ports:
+      - '3035:3035'
+    volumes:
+      - ..:/app:cached
+      - bundle:/usr/local/bundle
+      - node_modules:/app/node_modules
+      - packs:/app/public/packs
+      - packs-test:/app/public/packs-test
+    environment:
+      <<: *env
+      WEBPACKER_DEV_SERVER_HOST: 0.0.0.0
+      YARN_CACHE_FOLDER: /app/node_modules/.yarn-cache
+
+volumes:
+  bundle:
+  node_modules:
+  history:
+  rails_cache:
+  postgres:
+  redis:
+  packs:
+  packs-test:
+```
+
+</Transform>
+
+<qr-code url="https://github.com/evilmartians/ruby-on-whales/blob/b3edbc5663b460eadfd76d1b91a5e358b0f66884/example/.dockerdev/compose.yml" caption="Ruby on Whales: docker-compose.yml" class="absolute bottom-4 right-4 w-48" />
+
+<!--
+Docker Composeの設定はもっと長くなりますが、本当に重要なところだけをけんとうしてみましょう。
+-->
+
 ---
 
 ## Dockerの環境の問題解決: ボリューム
@@ -509,6 +795,8 @@ volumes:
   # …
 ```
 
+さらに、コンテナ内の`/tmp`とアプリの`tmp/pids`にtmpfsを利用されています。
+
 ---
 class: text-lg
 ---
@@ -521,6 +809,87 @@ class: text-lg
 - 前にインストールされたgemを再利用可能
 - ファイル許可に問題はありません
 - 掃除が簡単
+
+---
+class: annotated-list
+---
+
+## Dockerの環境の問題解決: サービス
+
+
+ - Docker Composeの設定でいろいろなサービスが定義されています。
+
+   `rails server`と`rails console`には異なるサービスが使われています。例えば、サーバーの起動用には、公開するポート番号を定義します。
+
+   サービスはdipの設定では使われています。
+
+ - DRYの為、拡張のサービス定義も使われています。
+
+   `x-app`と`x-backend`
+
+ - ヘルスチェック
+
+   `rails db:migrate`は依存するデータベースサービスの準備が整うまで待機するようにします。
+
+---
+class: text-sm
+---
+
+## Dockerの環境の問題解決: 拡張のサービス定義
+
+<div class="grid grid-cols-2 gap-2">
+
+```yaml
+x-app: &app
+  build:
+    context: .
+    args:
+      # Ruby, Node, PostgreSQL versions
+  image: example-dev:1.0.0
+  environment: &env
+    NODE_ENV: ${NODE_ENV:-development}
+    RAILS_ENV: ${RAILS_ENV:-development}
+  tmpfs:
+    - /tmp
+    - /app/tmp/pids
+
+x-backend: &backend
+  <<: *app
+  stdin_open: true
+  tty: true
+  volumes: # see previous slides
+  environment: &backend_environment
+    <<: *env
+    REDIS_URL: redis://redis:6379/
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432
+```
+
+```yaml
+services:
+  rails:
+    <<: *backend
+    command: bundle exec rails
+
+  web:
+    <<: *backend
+    command: bundle exec rails server -b 0.0.0.0
+    ports:
+      - '3000:3000'
+    depends_on:
+      webpacker:
+        condition: service_started
+
+  webpacker:
+    <<: *app
+    command: bundle exec ./bin/webpack-dev-server
+    ports:
+      - '3035:3035'
+    environment:
+      <<: *env
+      WEBPACKER_DEV_SERVER_HOST: 0.0.0.0
+```
+
+</div>
 
 ---
 
@@ -564,6 +933,148 @@ IRB_HISTFILE: /usr/local/hist/.irb_history
   ```
 
 <qr-code url="https://github.com/bibendi/dip" caption="github.com/bibendi/dip" class="absolute bottom-4 right-4 w-36" />
+
+---
+class: text-sm
+---
+
+## `dip.yml`
+
+<Transform scale="0.25">
+
+```yaml
+version: '7.1'
+
+# Define default environment variables to pass
+# to Docker Compose
+environment:
+  RAILS_ENV: development
+
+compose:
+  files:
+    - .dockerdev/compose.yml
+  project_name: example_demo
+
+interaction:
+  # This command spins up a Rails container with the required dependencies (such as databases),
+  # and opens a terminal within it.
+  runner:
+    description: Open a Bash shell within a Rails container (with dependencies up)
+    service: rails
+    command: /bin/bash
+
+  # Run a Rails container without any dependent services (useful for non-Rails scripts)
+  bash:
+    description: Run an arbitrary script within a container (or open a shell without deps)
+    service: rails
+    command: /bin/bash
+    compose_run_options: [ no-deps ]
+
+  # A shortcut to run Bundler commands
+  bundle:
+    description: Run Bundler commands
+    service: rails
+    command: bundle
+    compose_run_options: [ no-deps ]
+
+  # A shortcut to run RSpec (which overrides the RAILS_ENV)
+  rspec:
+    description: Run RSpec commands
+    service: rails
+    environment:
+      RAILS_ENV: test
+    command: bundle exec rspec
+
+  rails:
+    description: Run Rails commands
+    service: rails
+    command: bundle exec rails
+    subcommands:
+      s:
+        description: Run Rails server at http://localhost:3000
+        service: web
+        compose:
+          run_options: [service-ports, use-aliases]
+
+  yarn:
+    description: Run Yarn commands
+    service: rails
+    command: yarn
+    compose_run_options: [ no-deps ]
+
+  psql:
+    description: Run Postgres psql console
+    service: postgres
+    default_args: anycasts_dev
+    command: psql -h postgres -U postgres
+
+  'redis-cli':
+    description: Run Redis console
+    service: redis
+    command: redis-cli -h redis
+
+provision:
+  - dip compose down --volumes
+  - dip compose up -d postgres redis
+  - dip bash -c bin/setup
+```
+
+</Transform>
+
+<qr-code url="https://github.com/evilmartians/ruby-on-whales/blob/b3edbc5663b460eadfd76d1b91a5e358b0f66884/example/dip.yml" caption="Ruby on Whales: DIP config" class="absolute bottom-4 right-4 w-48" />
+
+---
+class: text-sm
+---
+
+## DIPの設定：コマンド
+
+```yaml
+interaction:
+  bundle:
+    service: rails
+    command: bundle
+    compose_run_options: [ no-deps ] # Don't launch database for `bundle install`
+
+
+  rspec:
+    service: rails
+    environment:
+      RAILS_ENV: test # overrides the RAILS_ENV
+    command: bundle exec rspec
+
+  rails:
+    service: rails
+    command: bundle exec rails
+    subcommands:
+      s:
+        service: web
+        compose:
+          run_options: [service-ports, use-aliases]
+```
+
+---
+
+## DIPの設定：プロビジョニング
+
+```yaml
+provision:
+  - dip compose down --volumes
+  - dip compose up -d postgres redis
+  - dip bash -c bin/setup
+```
+
+`dip provision`の一つのコマンドでは、アプリの開発環境はゼロから再構築されます。
+---
+class: annotated-list
+---
+
+<video autoplay>
+  <source src="https://evilmartians.com/static/4dd40639ad48829fc05b9a182dc8bcc1/dip-provision.av1.mp4" type="video/mp4">
+
+  Here is the video from this blog post: https://evilmartians.com/chronicles/ruby-on-whales-docker-for-ruby-rails-development#interactive-provisioning
+
+</video>
 
 ---
 class: annotated-list
