@@ -633,7 +633,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     $(grep -Ev '^\s*#' /tmp/Aptfile | xargs)
 ```
 
-TODO: Add link to docs
+[`RUN --mount`のドキュメント](https://github.com/moby/buildkit/blob/f47104a713b8b01a2e2cc415095e15351fc5c9b2/frontend/dockerfile/docs/reference.md#run---mount)を参照してください。
+
+<qr-code url="https://github.com/moby/buildkit/blob/f47104a713b8b01a2e2cc415095e15351fc5c9b2/frontend/dockerfile/docs/reference.md#run---mount" caption="Dockerfile RUN --mount docs" class="absolute bottom-4 right-4 w-36" />
 
 ---
 class: text-sm
