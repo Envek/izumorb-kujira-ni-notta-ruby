@@ -22,6 +22,7 @@ fonts:
   mono: Martian Mono
 aspectRatio: '16/9'
 mdc: true
+download: "https://files.speakerdeck.com/presentations/e4b4d2425a78478d80f6fe283785ab06/izumorb-kujira-ni-notta-ruby-local-docker-dev-env.pdf"
 
 transition: slide-left
 ---
